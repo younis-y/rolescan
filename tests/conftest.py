@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from jobscan.config import Config, ProfileConfig
+from jobscan.models import Job
+
+FIXTURE_CONFIG = """
+profile:
+  name: Test Candidate
+  summary: A candidate.
+  locations: [london, abu dhabi, remote]
+  keywords: {energy: 6, data scientist: 7, python: 4, trading: 6, graduate: 4}
+  blockers: {uae national: 40, "10+ years": 20, principal: 12}
+  min_keyword_score: 18
+  min_report_score: 55
+llm:
+  enabled: false
+output:
+  dir: digests
+  db_path: seen.db
+sources:
+  - {kind: greenhouse, slug: acme, label: Acme}
+"""
+
+
+@pytest.fixture
+def profile() -> ProfileConfig:
+    return ProfileConfig(
+        locations=["london", "abu dhabi", "remote"],
+        keywords={"energy": 6, "data scientist": 7, "python": 4, "trading": 6},
+        blockers={"uae national": 40, "10+ years": 20},
+        min_keyword_score=18,
+    )
+
+
+@pytest.fixture
+def config(tmp_path: Path) -> Config:
+    path = tmp_path / "config.yaml"
+    path.write_text(FIXTURE_CONFIG)
+    return Config.load(path)
+
+
+@pytest.fixture
+def energy_job() -> Job:
+    return Job(
+        source="greenhouse",
+        company="EDF Trading",
+        title="Graduate Data Scientist, Power Markets",
+        location="London, United Kingdom",
+        url="https://example.com/1",
+        description=(
+            "Day-ahead electricity price forecasting with Python. Energy "
+            "trading desk support, time series modelling."
+        ),
+        posted="2026-08-20",
+    )
+
+
+@pytest.fixture
+def gated_job() -> Job:
+    return Job(
+        source="smartrecruiters",
+        company="Masdar",
+        title="Data Scientist",
+        location="Abu Dhabi, United Arab Emirates",
+        url="https://example.com/2",
+        description=(
+            "Support analytics and AI product development. Python, SQL, Power "
+            "BI. Bachelor's degree; UAE National (National Talent programme). "
+            "Exposure to energy and utilities advantageous."
+        ),
+        posted="2026-08-22",
+    )

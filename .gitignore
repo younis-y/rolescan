@@ -1,0 +1,33 @@
+# Your config: profile, keywords, source list, and possibly an SMTP username.
+config.yaml
+
+# Third-party ATS dumps. CC BY-NC 4.0 — downloadable, not redistributable.
+# See ats-data/README.md for where to get them.
+ats-data/*.json
+
+# Local state and output.
+seen.db
+seen.db-wal
+seen.db-shm
+*.db
+digests/*
+cvs/*
+!cvs/README.md
+
+# Credentials.
+.env
+.env.*
+*.pem
+*.key
+
+# Tooling.
+.venv/
+__pycache__/
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# Local handoff notes, not project documentation.
+NEXT.md

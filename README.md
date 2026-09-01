@@ -1,0 +1,211 @@
+# jobscan
+
+A job scanner that reads employers' own career sites, scores postings against
+your CV, and writes you a ranked digest.
+
+It needs no accounts and no API keys to be useful. Every source but one is a
+public JSON or HTML endpoint — the same data a company's careers page loads to
+render itself.
+
+```bash
+pip install -e .
+cp config.example.yaml config.yaml   # edit it: profile, keywords, sources
+jobscan discover                     # check your sources resolve
+jobscan scan --no-llm                # a ranked digest, no credentials
+```
+
+## The two decisions worth reading the code for
+
+**A deterministic prefilter runs before anything expensive.** Scoring is two
+stages. The first is pure Python over the posting text: weighted keyword terms,
+tripled when they appear in the title, minus blocker terms and a location
+penalty. Postings below `min_keyword_score` never reach the second stage. Only
+the survivors are sent to an LLM. In the run recorded in
+`examples/run-summary.md` that stage discarded 490 of 526 postings before a
+single model call. The ordering is the point: the cheap stage is not a
+nicety, it is what decides the cost of the tool.
+
+**Sources and LLM backends are both entry-point plugins.** They register
+through `importlib.metadata` under the `jobscan.sources` and `jobscan.judges`
+groups, declared in `pyproject.toml`. A third-party package can ship a new ATS
+adapter or a new model backend without touching pipeline code, and the pipeline
+holds no knowledge of either. Adding an employer on an already-supported
+platform is a line of config and no code at all.
+
+## Why it exists
+
+Aggregators are late, partial, and full of recruiters. Postings arrive first on
+the employer's own site, which is backed by an applicant-tracking system with a
+public JSON API. jobscan reads those directly, so a role shows up the day it is
+posted, from the source, with the real apply link.
+
+The hard part is not fetching. It is knowing that Octopus Energy's board is
+`octoenergy` on Lever and not `octopus` on Greenhouse. `jobscan slugs` and
+`jobscan discover` exist for exactly that.
+
+## What it reads
+
+| Source | Needs a key | Notes |
+|---|---|---|
+| `greenhouse` `lever` `ashby` `workable` | no | public JSON, one request per board |
+| `smartrecruiters` | no | paginated. Returns 200 with zero rows for a slug that does not exist, so `discover` reports `UNKNOWN` rather than lying |
+| `workday` | no | needs tenant, site and host, all three readable from the careers URL |
+| `structured` | no | any site publishing schema.org `JobPosting` plus a sitemap. Covers Phenom People, SAP SuccessFactors, Teamtailor and Harbour today, by configuration rather than by adapter |
+| `adzuna` | yes | the one aggregator. Free tier, 20 countries |
+
+## How scoring works
+
+**1. Keywords.** Pure Python, no network, no credentials. Described above. You
+can stop here: `--no-llm` still gives a ranked, deduplicated, seen-tracked
+digest.
+
+**2. An LLM,** optionally. It picks which of your CV variants to send, scores
+fit, flags hard eligibility bars, and names concrete edits to make. Verdicts
+are cached on a content hash of the posting text, so re-running costs nothing
+for unchanged postings.
+
+The backend is a plugin. `jobscan backends` lists what is registered:
+
+| Name | Needs a key | What it is |
+|---|---|---|
+| `anthropic` | `ANTHROPIC_API_KEY` | Claude API. Best quality. Needs ANTHROPIC_API_KEY. |
+| `ollama` | no | Local model via Ollama. Free, offline, no key. NOT YET VERIFIED against a live server. |
+
+The Anthropic backend has run against the live API: the 25 August 2026 run in
+`examples/run-summary.md` scored 36 postings through it, with no failures
+reported. That key has since been revoked, so the run is a record rather than
+something you can re-execute. The Ollama backend has never run against a live
+instance. Both are written to
+their documented contracts and covered by tests against a mocked server, which
+proves the request shape, the schema validation and the error handling, but not
+the contracts themselves. The Ollama path sends a JSON Schema in `format`, so
+`FitVerdict` still arrives validated either way. Treat the first real run of
+either as the test.
+
+With `llm.enabled: false`, or with no key and no local model, you get stage one
+alone. If a configured backend fails, the digest says so rather than quietly
+serving keyword scores that look like a normal run — there is a test that
+asserts exactly this.
+
+## What you must supply
+
+- **Your own `config.yaml`.** Nothing is shipped. `config.example.yaml`
+  documents every knob; `examples/energy-trading.yaml` is a fully resolved,
+  working source list for UK and Gulf energy, with a placeholder profile.
+- **Your own API key.** Every secret resolves from the environment when the
+  corresponding config field is left blank: `ANTHROPIC_API_KEY`, and optionally
+  `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` and `JOBSCAN_SMTP_PASS`. Nothing is
+  bundled, and `config.yaml` is gitignored so a key pasted there by hand does
+  not follow you into a commit.
+- **Your own CV files**, if you want tailoring advice rather than generic
+  advice. See `cvs/README.md`.
+- **Your own ATS slug dataset**, if you want `jobscan slugs`. See
+  `ats-data/README.md`. It is CC BY-NC 4.0 and is not bundled here.
+
+Relative paths resolve against the config file, not the working directory, so a
+cron job writes to the same database as an interactive run.
+
+## Results
+
+One run, 25 August 2026, against a private config covering the same employers
+as `examples/energy-trading.yaml`:
+
+| | |
+|---|---|
+| Unique postings fetched | 526 |
+| Sources contributing | 9 |
+| Discarded by the keyword prefilter | 490 (93%) |
+| Sent to stage two | 36 |
+| Scored from cache | 0 (first run) |
+
+The counters and the per-source outcome footer from that run are reproduced in
+`examples/run-summary.md`. The ranked postings are not: a digest records one
+person's job search, and that is not something to publish. This is one
+measurement against one source list, not a benchmark — the discard rate is a
+function of how tightly you write your keywords.
+
+## Commands
+
+```
+jobscan discover     probe every configured source; report OK / EMPTY / UNKNOWN / SKIPPED / FAIL
+jobscan slugs NAME   find a real board slug in a harvested ATS dataset
+jobscan sources      every registered source kind and its slug format
+jobscan backends     every registered LLM backend, and which need a key
+jobscan cvs          which CV variants were found and how they parse
+jobscan scan         fetch, score, write the digest   (--dry, --no-llm, --no-email)
+jobscan show         reprint the latest digest
+jobscan stats        how many postings the store has seen
+jobscan prune        drop stale cached verdicts
+```
+
+`discover` distinguishes five outcomes on purpose. `EMPTY` means a real board
+with no openings; `UNKNOWN` means an API that cannot tell an empty board from a
+wrong slug. Collapsing those into a single "OK" hides which of them actually returned postings. ## Finding slugs
+
+`jobscan slugs` searches a harvested ATS directory you download yourself. It
+matches on `difflib.SequenceMatcher` with a length-aware cap and a directional
+containment bonus, because absolute name length rather than length ratio is
+what separates `octoenergy` from `octopusenergy` without also collapsing `vitl`
+into `vitol`.
+
+The dataset has no SmartRecruiters file and covers no bespoke platforms, so
+expect to resolve some employers by hand: open the careers page, follow where it
+redirects, and read the ATS and slug out of the final URL. `discover` then
+confirms or refutes it.
+
+## Scope
+
+What this does not claim:
+
+- **Neither LLM backend has been run against a live server.** See above.
+- **Public endpoints only.** Nothing behind a login, no session cookies, no
+  captcha solving, no scraping of anything a careers page does not serve to an
+  anonymous browser.
+- **Five ATS platforms have first-class adapters** — Greenhouse, Lever, Ashby,
+  Workable, SmartRecruiters — plus Workday, which needs three values rather
+  than a slug. Everything else is reached through the generic schema.org source
+  or not at all.
+- **The slug dataset is third-party, incomplete and not redistributable.** It
+  ships no SmartRecruiters file. Slug resolution remains partly manual.
+- **Not a tracker.** It records what it has seen so it does not show you the
+  same posting twice. It does not manage applications, and it does not apply to
+  anything on your behalf.
+- **The scores are a triage heuristic**, not a prediction of whether you will be
+  interviewed.
+
+## Reading the source
+
+The module docstrings are written to record negative results, not just to
+describe what the code does. Why length ratio is the wrong discriminator for
+slug matching; why conditional GETs are useless against employers who answer
+`If-Modified-Since` with 200 and the full body, leaving sitemap `lastmod` as
+the only workable cache-invalidation signal; why Workday's 422 and 404 mean
+opposite things, one a wrong tenant and one a wrong site; why SmartRecruiters'
+zero result count is never verification. Approaches that were tried and
+rejected are written down where the next person will hit them, which is the
+main reason the docstrings are long.
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+pytest && mypy src tests && ruff check .
+```
+
+The suite is 164 tests and runs in about two seconds with no network: `respx`
+mocks the transport, so the real HTTP clients and the real parsers are exercised
+against recorded response shapes rather than being stubbed out. `mypy` runs
+strict over `src` and `tests`.
+
+The suite is offline by construction: HTTP is mocked with `respx`, so tests
+exercise the real client and the real parsers against recorded payloads rather
+than stubs. mypy runs in strict mode over `src` and `tests`. CI runs all three
+on Python 3.11 and 3.12 — see `.github/workflows/ci.yml`.
+
+## Licence
+
+MIT. See `LICENSE`.
+
+The harvested ATS directories that `jobscan slugs` reads are not covered by it:
+they come from a third party under CC BY-NC 4.0, are never bundled, and are
+gitignored. See `ats-data/README.md`.

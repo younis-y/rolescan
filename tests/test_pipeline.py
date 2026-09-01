@@ -1,0 +1,361 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import httpx
+import respx
+
+from jobscan.config import Config
+from jobscan.digest import render_markdown
+from jobscan.models import (
+    Confidence,
+    CVVariant,
+    FitVerdict,
+    Job,
+    ScoredJob,
+    Verdict,
+)
+from jobscan.pipeline import ScanResult, SourceReport, deduplicate, run_scan
+
+
+def _payload(title: str, content: str, jid: int = 1) -> dict[str, object]:
+    return {
+        "jobs": [
+            {
+                "id": jid,
+                "title": title,
+                "location": {"name": "London, UK"},
+                "absolute_url": f"https://boards.greenhouse.io/acme/jobs/{jid}",
+                "content": content,
+                "updated_at": "2026-08-20T10:00:00Z",
+            }
+        ]
+    }
+
+
+def test_deduplicate_keeps_the_richest_copy() -> None:
+    thin = Job(
+        source="adzuna",
+        company="Drax",
+        title="Energy Analyst",
+        location="London",
+        url="https://adzuna/1",
+        description="short",
+    )
+    rich = Job(
+        source="greenhouse",
+        company="Drax",
+        title="Energy Analyst",
+        location="London",
+        url="https://drax/1",
+        description="a much longer description with real detail",
+    )
+    out = deduplicate([thin, rich])
+    assert len(out) == 1
+    assert out[0].source == "greenhouse", "prefer the ATS copy over the aggregator"
+
+
+def test_deduplicate_is_order_independent() -> None:
+    a = Job(
+        source="x",
+        company="C",
+        title="T",
+        location="L",
+        url="https://1",
+        description="aa",
+    )
+    b = Job(
+        source="y",
+        company="C",
+        title="T",
+        location="L",
+        url="https://2",
+        description="aaaa",
+    )
+    assert deduplicate([a, b])[0].description == deduplicate([b, a])[0].description
+
+
+@respx.mock
+async def test_scan_reports_a_match(config: Config) -> None:
+    respx.get("https://boards-api.greenhouse.io/v1/boards/acme/jobs").mock(
+        return_value=httpx.Response(
+            200,
+            json=_payload(
+                "Graduate Energy Data Scientist",
+                "Python, trading, energy, day-ahead forecasting.",
+            ),
+        )
+    )
+    result = await run_scan(config)
+    assert result.unique == 1
+    assert len(result.reportable) == 1
+    assert result.reportable[0].job.company == "Acme"
+
+
+@respx.mock
+async def test_second_run_reports_nothing_new(config: Config) -> None:
+    respx.get("https://boards-api.greenhouse.io/v1/boards/acme/jobs").mock(
+        return_value=httpx.Response(
+            200,
+            json=_payload(
+                "Graduate Energy Data Scientist",
+                "Python, trading, energy, day-ahead forecasting.",
+            ),
+        )
+    )
+    assert len((await run_scan(config)).reportable) == 1
+    second = await run_scan(config)
+    assert second.reportable == []
+    assert second.already_seen == 1
+
+
+@respx.mock
+async def test_dry_run_does_not_persist(config: Config) -> None:
+    respx.get("https://boards-api.greenhouse.io/v1/boards/acme/jobs").mock(
+        return_value=httpx.Response(
+            200,
+            json=_payload("Graduate Energy Data Scientist", "Python, trading, energy."),
+        )
+    )
+    await run_scan(config, dry_run=True)
+    again = await run_scan(config, dry_run=True)
+    assert again.already_seen == 0, "a dry run must leave the store untouched"
+
+
+@respx.mock
+async def test_gated_role_is_filtered_by_prefilter(config: Config) -> None:
+    respx.get("https://boards-api.greenhouse.io/v1/boards/acme/jobs").mock(
+        return_value=httpx.Response(
+            200,
+            json=_payload(
+                "Data Scientist",
+                "Analytics role. UAE National (National Talent programme) required.",
+            ),
+        )
+    )
+    result = await run_scan(config)
+    assert result.reportable == []
+    assert result.prefiltered == 1
+
+
+@respx.mock
+async def test_a_dead_source_does_not_kill_the_scan(config: Config) -> None:
+    config.sources.append(
+        type(config.sources[0])(kind="greenhouse", slug="dead", label="Dead")
+    )
+    respx.get("https://boards-api.greenhouse.io/v1/boards/acme/jobs").mock(
+        return_value=httpx.Response(
+            200,
+            json=_payload("Graduate Energy Data Scientist", "Python, trading, energy."),
+        )
+    )
+    respx.get("https://boards-api.greenhouse.io/v1/boards/dead/jobs").mock(
+        return_value=httpx.Response(404)
+    )
+    result = await run_scan(config)
+    assert len(result.reportable) == 1
+    assert len(result.failed_sources) == 1
+    assert "404" in result.failed_sources[0].error
+
+
+# --- digest ---------------------------------------------------------------
+
+
+def _scored(job: Job, **kw: object) -> ScoredJob:
+    base = {
+        "fit_score": 82,
+        "verdict": Verdict.APPLY,
+        "confidence": Confidence.HIGH,
+        "reason": "Overlaps the day-ahead forecasting work.",
+        "cv_variant": CVVariant.ENERGY,
+        "tailoring": ["Lead with the battery dispatch LP result."],
+    }
+    return ScoredJob(job=job, fit=FitVerdict.model_validate(base | kw))
+
+
+def test_digest_renders_llm_detail(energy_job: Job) -> None:
+    result = ScanResult(
+        unique=5,
+        reportable=[_scored(energy_job)],
+        reports=[SourceReport("greenhouse", "acme", "Acme", 5)],
+    )
+    out = render_markdown(result)
+    assert "EDF Trading" in out
+    assert "CV_Energy" in out
+    assert "battery dispatch" in out
+    assert "82/100" in out
+    assert "[Apply](https://example.com/1)" in out
+
+
+def test_digest_separates_blocked(energy_job: Job, gated_job: Job) -> None:
+    result = ScanResult(
+        unique=2,
+        reportable=[
+            _scored(energy_job),
+            _scored(
+                gated_job,
+                verdict=Verdict.BLOCKED,
+                fit_score=70,
+                blockers=["UAE National only"],
+            ),
+        ],
+    )
+    out = render_markdown(result)
+    assert "## Worth a look" in out
+    assert "## Blocked" in out
+    assert out.index("## Worth a look") < out.index("## Blocked")
+    assert "UAE National only" in out
+
+
+def test_empty_digest_says_so_plainly() -> None:
+    out = render_markdown(ScanResult(unique=40, already_seen=40))
+    assert "Nothing new worth your time" in out
+    assert "40" in out
+
+
+def test_digest_surfaces_failed_sources() -> None:
+    result = ScanResult(
+        reports=[
+            SourceReport("greenhouse", "dead", "Dead", error="FetchError: HTTP 404")
+        ]
+    )
+    out = render_markdown(result)
+    assert "greenhouse/dead" in out
+    assert "jobscan discover" in out
+
+
+def test_dry_run_is_labelled_in_the_digest(energy_job: Job) -> None:
+    out = render_markdown(ScanResult(reportable=[_scored(energy_job)], dry_run=True))
+    assert "Dry run" in out
+
+
+def test_blocked_roles_get_no_cv_advice(gated_job: Job) -> None:
+    """Suggesting a CV for a role you cannot be considered for invites waste."""
+    item = _scored(
+        gated_job,
+        verdict=Verdict.BLOCKED,
+        fit_score=70,
+        blockers=["UAE National only"],
+        tailoring=["Lead with the forecasting work."],
+    )
+    out = render_markdown(ScanResult(unique=1, reportable=[item]))
+    assert "UAE National only" in out
+    assert "**Send:**" not in out
+    assert "Tailor it" not in out
+
+
+def test_stats_line_pluralises() -> None:
+    one = render_markdown(
+        ScanResult(unique=1, reports=[SourceReport("greenhouse", "a", "A", 1)])
+    )
+    assert "1 unique posting from 1 source." in one
+    many = render_markdown(
+        ScanResult(
+            unique=9,
+            reports=[
+                SourceReport("greenhouse", "a", "A", 1),
+                SourceReport("lever", "b", "B", 8),
+            ],
+        )
+    )
+    assert "9 unique postings from 2 sources." in many
+
+
+# --- the structured source's posting cache must survive across scans -------
+
+
+@respx.mock
+async def test_a_second_scan_does_not_refetch_an_unchanged_posting(
+    tmp_path: Path,
+) -> None:
+    """The whole point of the lastmod cache: 347 pages a day, almost all
+    unchanged. If run_scan does not hand the source a cache, it re-downloads
+    everything and the cache is decorative."""
+    sitemap = (
+        '<?xml version="1.0"?><urlset><url>'
+        "<loc>https://ex.test/job/1</loc><lastmod>2026-08-25</lastmod>"
+        "</url></urlset>"
+    )
+    page = (
+        '<html><head><script type="application/ld+json">'
+        '{"@context":"http://schema.org","@type":"JobPosting",'
+        '"title":"Power Market Analyst","datePosted":"2026-08-23",'
+        '"hiringOrganization":{"@type":"Organization","name":"Ex Energy"},'
+        '"description":"&lt;p&gt;Forecasting day-ahead electricity prices.&lt;/p&gt;"}'
+        "</script></head><body>x</body></html>"
+    )
+    respx.get("https://ex.test/sitemap.xml").mock(
+        return_value=httpx.Response(200, text=sitemap)
+    )
+    detail = respx.get("https://ex.test/job/1").mock(
+        return_value=httpx.Response(200, text=page)
+    )
+
+    cfg = Config.model_validate(
+        {
+            "profile": {"min_keyword_score": 0, "min_report_score": 0},
+            "llm": {"enabled": False},
+            "output": {"dir": str(tmp_path), "db_path": str(tmp_path / "seen.db")},
+            "sources": [
+                {
+                    "kind": "structured",
+                    "slug": "ex",
+                    "label": "Ex Energy",
+                    "sitemap": "https://ex.test/sitemap.xml",
+                    "url_pattern": "/job/",
+                    "delay": 0,
+                }
+            ],
+        }
+    )
+
+    first = await run_scan(cfg)
+    assert first.fetched == 1
+    assert detail.call_count == 1
+
+    second = await run_scan(cfg)
+    assert second.fetched == 1, "the posting must still reach the pipeline"
+    assert detail.call_count == 1, "an unchanged lastmod must not re-download it"
+    assert second.already_seen == 1, "and the store must recognise it as seen"
+
+
+# --- a failing LLM must not look like a successful keyword-only scan -------
+
+
+@respx.mock
+async def test_llm_failure_is_surfaced_not_silently_downgraded(tmp_path: Path) -> None:
+    """A revoked ANTHROPIC_API_KEY makes every scoring call 401. Each failure
+    was caught per-job and logged at WARNING, so the digest rendered a normal
+    scan with every role marked "keyword only" — indistinguishable from a
+    deliberate --no-llm run. Twelve hours of postings scored by keywords alone,
+    with nothing in the output saying so."""
+    respx.get("https://boards-api.greenhouse.io/v1/boards/acme/jobs").mock(
+        return_value=httpx.Response(
+            200, json=_payload("Power Market Analyst", "Forecasting day-ahead prices.")
+        )
+    )
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(
+            401,
+            json={
+                "type": "error",
+                "error": {
+                    "type": "authentication_error",
+                    "message": "API key is invalid.",
+                },
+            },
+        )
+    )
+    cfg = Config.model_validate(
+        {
+            "profile": {"min_keyword_score": 0, "min_report_score": 0},
+            "llm": {"enabled": True, "api_key": "test-key-rejected-by-the-api"},
+            "output": {"dir": str(tmp_path), "db_path": str(tmp_path / "seen.db")},
+            "sources": [{"kind": "greenhouse", "slug": "acme", "label": "Acme"}],
+        }
+    )
+    result = await run_scan(cfg)
+
+    assert result.llm_errors == 1, "the scan must count scoring failures"
+    text = render_markdown(result)
+    assert "scoring failed" in text.casefold(), text

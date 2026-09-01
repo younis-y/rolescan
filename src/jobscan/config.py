@@ -1,0 +1,185 @@
+"""Configuration: a validated pydantic tree loaded from YAML.
+
+Every knob lives here so behaviour changes are config edits, not code edits.
+Secrets resolve from the environment when left blank, so the file itself stays
+safe to commit.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Annotated, Any, Self
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+__all__ = ["Config", "LLMConfig", "OutputConfig", "ProfileConfig", "SourceEntry"]
+
+
+class SourceEntry(BaseModel):
+    """One configured board. `kind` selects the registered source plugin."""
+
+    model_config = ConfigDict(extra="allow")
+
+    kind: str
+    slug: str
+    label: str = ""
+    enabled: bool = True
+    verified: bool = False
+
+    @model_validator(mode="after")
+    def _default_label(self) -> Self:
+        if not self.label:
+            object.__setattr__(self, "label", self.slug)
+        return self
+
+    @property
+    def options(self) -> dict[str, Any]:
+        """Extra source-specific keys, e.g. Workday's site and host.
+
+        pydantic v2 keeps `extra="allow"` fields in `model_extra`, separate
+        from the declared ones, so this reads there rather than `__dict__`.
+        """
+        return dict(self.model_extra or {})
+
+
+class ProfileConfig(BaseModel):
+    """Who the candidate is, and what counts as a good role for them."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = ""
+    summary: str = Field(
+        default="",
+        description="Free text handed to the LLM as the candidate background.",
+    )
+    cv_dir: Path | None = Field(
+        default=None,
+        description="Directory of CV variant files, used for tailoring advice.",
+    )
+    locations: list[str] = Field(default_factory=list)
+    allow_remote: bool = True
+    keywords: dict[str, int] = Field(default_factory=dict)
+    blockers: dict[str, int] = Field(default_factory=dict)
+    location_penalty: int = 25
+    min_keyword_score: Annotated[int, Field(ge=0)] = 18
+    """Prefilter gate. Postings below this never reach the LLM, which is the
+    single biggest lever on cost."""
+    min_report_score: Annotated[int, Field(ge=0, le=100)] = 55
+    """Final gate. Postings below this never reach the digest."""
+
+
+class LLMConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    backend: str = "anthropic"
+    """Which LLM plugin scores postings. `anthropic` needs a key; `ollama`
+    runs a local model and needs none. See `jobscan backends`."""
+    base_url: str = "http://localhost:11434"
+    """Only read by local backends. Ollama's default listener."""
+    timeout: float = 120.0
+    """Local models are slow. This is per posting, not per run."""
+    model: str = "claude-sonnet-5"
+    """Sonnet is the right tier here: the task is judgement over a short
+    document, run tens of times a day."""
+    api_key: str = ""
+    max_tokens: int = 1500
+    max_concurrent: Annotated[int, Field(ge=1, le=32)] = 5
+    max_calls_per_run: Annotated[int, Field(ge=0)] = 60
+    """Hard ceiling. Stops a badly tuned prefilter turning into a big bill."""
+    description_chars: Annotated[int, Field(ge=500)] = 6000
+    cache_days: Annotated[int, Field(ge=0)] = 30
+
+    @model_validator(mode="after")
+    def _resolve_key(self) -> Self:
+        """Disable hosted scoring when there is no key — but only hosted.
+
+        Disabling unconditionally was correct while Claude was the only
+        backend and wrong the moment a local one existed: a model on
+        localhost has no key and never will, so an empty api_key would have
+        silently switched the scorer off for exactly the users who chose the
+        backend to avoid needing one.
+        """
+        from jobscan.scoring.judges import available_judges
+
+        if not self.api_key:
+            object.__setattr__(self, "api_key", os.environ.get("ANTHROPIC_API_KEY", ""))
+        judge = available_judges().get(self.backend)
+        needs_key = judge.needs_api_key if judge else True
+        if self.enabled and needs_key and not self.api_key:
+            object.__setattr__(self, "enabled", False)
+        return self
+
+
+class HTTPConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timeout: float = 20.0
+    max_concurrent: Annotated[int, Field(ge=1, le=64)] = 8
+    max_retries: Annotated[int, Field(ge=0, le=10)] = 3
+    user_agent: str = "jobscan/2.2 (personal job search tool)"
+
+
+class EmailConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    smtp_host: str = ""
+    smtp_port: int = 587
+    username: str = ""
+    password: str = ""
+    to: str = ""
+
+    @model_validator(mode="after")
+    def _resolve(self) -> Self:
+        if not self.password:
+            object.__setattr__(
+                self, "password", os.environ.get("JOBSCAN_SMTP_PASS", "")
+            )
+        if self.enabled and not (self.smtp_host and self.password):
+            object.__setattr__(self, "enabled", False)
+        return self
+
+
+class OutputConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dir: Path = Path("digests")
+    db_path: Path = Path("seen.db")
+    max_roles: Annotated[int, Field(ge=1)] = 15
+    show_blocked: bool = True
+    """Blocked roles are still worth seeing once, so you know the market moved."""
+    email: EmailConfig = Field(default_factory=EmailConfig)
+
+
+class Config(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    profile: ProfileConfig = Field(default_factory=ProfileConfig)
+    sources: list[SourceEntry] = Field(default_factory=list)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    http: HTTPConfig = Field(default_factory=HTTPConfig)
+    output: OutputConfig = Field(default_factory=OutputConfig)
+
+    root: Path = Field(default=Path(), exclude=True)
+
+    @classmethod
+    def load(cls, path: Path) -> Config:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        cfg = cls.model_validate(data)
+        object.__setattr__(cfg, "root", path.resolve().parent)
+        return cfg
+
+    def resolve(self, p: Path) -> Path:
+        """Interpret relative paths against the config file, not the cwd.
+
+        Without this, a cron job with a different working directory silently
+        writes its database somewhere new and re-reports every role as fresh.
+        """
+        return p if p.is_absolute() else self.root / p
+
+    @property
+    def enabled_sources(self) -> list[SourceEntry]:
+        return [s for s in self.sources if s.enabled]

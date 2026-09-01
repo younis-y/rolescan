@@ -1,0 +1,154 @@
+# Worked example: energy trading and energy data science, UK + Gulf.
+#
+# The value here is the SOURCE LIST. Slugs are the hard part of this tool, and
+# every one below was resolved by hand and confirmed with `jobscan discover`
+# — 13 verified, 0 broken. The comments record how each was found, so a wrong
+# guess does not get re-introduced later.
+#
+# Copy this over config.yaml and replace the profile with your own.
+
+profile:
+  name: Your Name
+  summary: |
+    Replace this with a few paragraphs about yourself: degrees, experience,
+    projects with numbers in them, tools, languages, where you can work, and
+    how senior you actually are. The LLM reads it verbatim. Numbers beat
+    adjectives, and being honest about your level stops the scorer flattering
+    you into roles you will not get.
+  cv_dir: cvs
+  locations: [abu dhabi, dubai, uae, riyadh, saudi, doha, qatar, london, united kingdom]
+  allow_remote: true
+  keywords:
+    day-ahead: 9
+    power market: 8
+    energy: 6
+    commodities: 6
+    trading: 6
+    forecasting: 7
+    time series: 7
+    quantitative: 7
+    data scientist: 7
+    python: 4
+    graduate: 4
+  blockers:
+    uae national: 40
+    emiratisation: 30
+    security clearance: 25
+    "10+ years": 20
+    director: 15
+  location_penalty: 25
+  min_keyword_score: 18
+  min_report_score: 55
+
+llm:
+  enabled: true
+  backend: anthropic     # or `ollama` for a local model and no key at all
+  model: claude-sonnet-5
+  max_calls_per_run: 60
+
+output:
+  dir: digests
+  db_path: seen.db
+
+# ---------------------------------------------------------------------------
+# Sources.
+#
+# `verified: false` means the slug is a guess. Run `jobscan discover` to find
+# out which are real, then fix or delete the failures.
+#
+# Adding employers is the highest-leverage change you can make to this file.
+# ---------------------------------------------------------------------------
+sources:
+  # --- Gulf energy -------------------------------------------------------
+  # Masdar is the only Gulf employer on an ATS jobscan speaks. Checked by hand
+  # 2026-08-24: ADNOC is Phenom People, ACWA Power is SAP SuccessFactors, TAQA
+  # is Hireserve, Mubadala is Taleo, and EWEC has no careers portal at all.
+  # Their SmartRecruiters and Workday entries were guesses and are removed.
+  # EWEC is not here and cannot be: it publishes no vacancies anywhere on
+  # ewec.ae and takes CVs by email. There is no endpoint to point at.
+  - {kind: smartrecruiters, slug: Masdar, label: Masdar, verified: true}
+
+  # Workday needs tenant + site + host, all three from the careers URL:
+  #   https://<slug>.<host>.myworkdayjobs.com/en-US/<site>
+  # A 422 from discover means no such tenant; a 404 means the site is wrong.
+
+  # --- UK energy and trading --------------------------------------------
+  - {kind: lever, slug: octoenergy, label: Octopus Energy, verified: true}
+  # Workday, not greenhouse. Verified by the status triple:
+  #   gresearch/G-Research 200 (61 jobs) | gresearch/External 404 (wrong site)
+  #   gresearchbogus/G-Research 422 (no such tenant)
+  - {kind: workday, slug: gresearch, site: G-Research, host: wd103,
+     label: G-Research, verified: true}
+  # vitol.com/careers links jobs.smartrecruiters.com/Vitol; API returns 33.
+  - {kind: smartrecruiters, slug: Vitol, label: Vitol, verified: true}
+  # Teamtailor (careers.axpo.com CNAME -> ext.teamtailor.com), which serves
+  # JSON-LD JobPosting server-side, so the generic source reads it with no
+  # new adapter. 79 job URLs in the sitemap.
+  - {kind: structured, slug: axpo, label: Axpo, verified: true,
+     sitemap: "https://careers.axpo.com/sitemap.xml",
+     url_pattern: "/jobs/", delay: 0.4}
+  - {kind: greenhouse, slug: modoenergy, label: Modo Energy, verified: true}
+  - {kind: workday, slug: centrica, site: centrica, host: wd3, label: Centrica, verified: true}
+  # National Grid is NOT Workday. Checked by hand 2026-08-24:
+  #   careers.nationalgrid.com  -> vanity.beamery.eu          (Beamery CRM)
+  #   jobs.nationalgrid.com     -> careers.happydance.website (Beamery careers site)
+  #   jobs-ats.nationalgrid.com -> 213000.jobs2web.com        (SAP SuccessFactors, the real ATS)
+  # 32 probes across 4 tenants x 8 hosts (wd1..wd103) all returned 422 = no such
+  # tenant. Re-add it only once the `structured` source lands, pointed at
+  #   https://jobs-ats.nationalgrid.com/search/   (158 jobs, UK + US on one site)
+  #
+  # TRAP: neso.wd103.myworkdayjobs.com IS a live Workday tenant with ~27 jobs and
+  # looks like the answer. It is NESO, the National Energy System Operator, which
+  # was divested from National Grid into public ownership in October 2024. It is a
+  # different employer. Do not add it as National Grid.
+  # Trafigura hosts five career sites; this is the trading business, not
+  # Puma Energy / Impala / Galena / the Foundation.
+  - {kind: workday, slug: trafigura, site: trafiguracareersite, host: wd3, label: Trafigura, verified: true}
+  - {kind: workday, slug: gunvor, site: gunvor_careers, host: wd3, label: Gunvor, verified: true}
+
+  # --- Generic schema.org sources ----------------------------------------
+  # TAQA runs Harbour ATS. It publishes JSON-LD JobPosting, but description and
+  # addressLocality are null — the real text is only in the HTML body, which is
+  # why the source falls back to body text. Inventory is tiny (3 roles, all TAQA
+  # North / Calgary at time of writing), so expect this to be near-empty.
+  - {kind: structured, slug: taqa, label: TAQA, verified: true,
+     sitemap: "https://jobs.taqa.com/sitemap.xml",
+     url_pattern: "/vacancies/[0-9]", delay: 0.4}
+
+  # One adapter, three employers. Verified 2026-08-25: ADNOC publishes JSON-LD,
+  # ACWA Power and National Grid publish the same vocabulary as microdata.
+  # Neither honours If-Modified-Since, so the sitemap's lastmod gates refetches.
+  - {kind: structured, slug: adnoc, label: ADNOC, verified: true,
+     sitemap: "https://jobs.adnoc.ae/us/en/sitemap.xml",
+     url_pattern: "/us/en/job/", delay: 0.4}
+  - {kind: structured, slug: acwapower, label: ACWA Power, verified: true,
+     sitemap: "https://careers.acwapower.com/sitemap.xml",
+     url_pattern: "/job/", delay: 0.4}
+  # National Grid runs UK and US hiring on one SuccessFactors instance: 108 of
+  # 164 sitemap URLs are US roles, which the profile's `locations` list has no
+  # entries for and therefore penalises 25 points anyway. US URLs end
+  # -<STATE>-<ZIP>/; UK ones carry alphanumeric postcodes (CV34-6DA), so the
+  # digit requirement is what keeps this from eating London roles.
+  - {kind: structured, slug: nationalgrid, label: National Grid, verified: true,
+     sitemap: "https://jobs-ats.nationalgrid.com/sitemap.xml",
+     url_pattern: "/job/", exclude_pattern: "-[A-Z]{2}-[0-9]{5}/", delay: 0.4}
+
+  # --- Aggregator --------------------------------------------------------
+  # Adzuna covers 20 countries and the UAE is NOT one of them. It is your UK
+  # instrument only; the Gulf is carried by the employer list above.
+  - kind: adzuna
+    slug: gb
+    label: Adzuna UK
+    # Was verified: true in the shipped config, but discover reports SKIPPED
+    # (no ADZUNA_APP_ID / ADZUNA_APP_KEY), and SKIPPED is not evidence the
+    # slug works. Set this back to true once the credentials are in the
+    # environment and discover reports OK.
+    verified: false
+    max_days_old: 7
+    queries:
+      - energy data scientist
+      - power market analyst
+      - energy trading analyst
+      - quantitative analyst commodities
+      - graduate data scientist energy
+      - electricity price forecasting

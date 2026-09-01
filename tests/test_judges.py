@@ -1,0 +1,194 @@
+"""Pluggable LLM backends.
+
+The tool is useful with no credentials at all: every source except Adzuna is a
+public endpoint, and keyword scoring is pure Python. The LLM stage is the only
+part that ever needed a key, so it is a plugin — `anthropic` for people who
+have a key, `ollama` for a local model, and neither when `llm.enabled` is off.
+"""
+
+from __future__ import annotations
+
+import httpx
+import pytest
+import respx
+
+from jobscan.config import LLMConfig, ProfileConfig
+from jobscan.models import FitVerdict, Job, ScoredJob
+from jobscan.scoring import CVLibrary, FitScorer
+from jobscan.scoring.judges import available_judges, get_judge
+
+VERDICT_JSON = {
+    "fit_score": 72,
+    "verdict": "consider",
+    "confidence": "medium",
+    "reason": "Strong power-market overlap, but the role wants five years.",
+    "cv_variant": "CV_Energy",
+    "tailoring": ["Lead with the day-ahead forecasting project."],
+    "blockers": [],
+    "keywords_missing": ["Kubernetes"],
+}
+
+
+def _job() -> ScoredJob:
+    job = Job(
+        source="test",
+        company="Acme",
+        title="Power Market Analyst",
+        location="London",
+        url="https://x/1",
+        description="Day-ahead price forecasting with Python.",
+    )
+    return ScoredJob(job=job, keyword_score=40)
+
+
+# --- the registry ----------------------------------------------------------
+
+
+def test_both_backends_are_registered() -> None:
+    assert set(available_judges()) >= {"anthropic", "ollama"}
+
+
+def test_unknown_backend_names_the_ones_that_exist() -> None:
+    with pytest.raises(KeyError) as e:
+        get_judge("gpt4", LLMConfig())
+    assert "anthropic" in str(e.value) and "ollama" in str(e.value)
+
+
+def test_only_the_anthropic_backend_declares_it_needs_a_key() -> None:
+    assert available_judges()["anthropic"].needs_api_key is True
+    assert available_judges()["ollama"].needs_api_key is False
+
+
+# --- config: a keyless backend must not be disabled for want of a key ------
+
+
+def test_ollama_backend_stays_enabled_without_an_api_key() -> None:
+    """LLMConfig disabled itself whenever api_key was empty. That is correct
+    for a hosted API and wrong for a local model, which never has one."""
+    cfg = LLMConfig(enabled=True, backend="ollama", api_key="")
+    assert cfg.enabled is True
+
+
+def test_anthropic_backend_still_disables_itself_without_a_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    cfg = LLMConfig(enabled=True, backend="anthropic", api_key="")
+    assert cfg.enabled is False, "no key means no hosted scoring, silently or not"
+
+
+def test_default_backend_is_anthropic() -> None:
+    assert LLMConfig().backend == "anthropic"
+
+
+# --- the ollama backend ----------------------------------------------------
+
+
+@respx.mock
+async def test_ollama_judge_returns_a_validated_verdict() -> None:
+    route = respx.post("http://localhost:11434/api/chat").mock(
+        return_value=httpx.Response(
+            200, json={"message": {"content": __import__("json").dumps(VERDICT_JSON)}}
+        )
+    )
+    cfg = LLMConfig(enabled=True, backend="ollama", model="qwen2.5:7b")
+    judge = get_judge("ollama", cfg)
+    verdict = await judge.verdict("system text", "user text")
+    assert isinstance(verdict, FitVerdict)
+    assert verdict.fit_score == 72
+    assert route.called
+    body = __import__("json").loads(route.calls[0].request.content)
+    assert body["model"] == "qwen2.5:7b"
+    assert body["stream"] is False
+    assert body["format"]["type"] == "object", "schema-constrained, not free JSON"
+    assert "fit_score" in body["format"]["properties"]
+
+
+@respx.mock
+async def test_ollama_connection_refused_is_a_useful_message() -> None:
+    """The most likely failure is that ollama simply is not running."""
+    respx.post("http://localhost:11434/api/chat").mock(
+        side_effect=httpx.ConnectError("connection refused")
+    )
+    judge = get_judge("ollama", LLMConfig(enabled=True, backend="ollama"))
+    with pytest.raises(RuntimeError) as e:
+        await judge.verdict("s", "u")
+    assert "ollama" in str(e.value).casefold()
+    assert "11434" in str(e.value)
+
+
+@respx.mock
+async def test_ollama_base_url_is_configurable() -> None:
+    respx.post("http://box.local:11434/api/chat").mock(
+        return_value=httpx.Response(
+            200, json={"message": {"content": __import__("json").dumps(VERDICT_JSON)}}
+        )
+    )
+    cfg = LLMConfig(enabled=True, backend="ollama", base_url="http://box.local:11434")
+    assert (await get_judge("ollama", cfg).verdict("s", "u")).fit_score == 72
+
+
+# --- the scorer uses whichever backend is configured -----------------------
+
+
+@respx.mock
+async def test_fit_scorer_routes_through_the_configured_backend() -> None:
+    respx.post("http://localhost:11434/api/chat").mock(
+        return_value=httpx.Response(
+            200, json={"message": {"content": __import__("json").dumps(VERDICT_JSON)}}
+        )
+    )
+    cfg = LLMConfig(enabled=True, backend="ollama", model="qwen2.5:7b")
+    scorer = FitScorer(cfg, ProfileConfig(), CVLibrary({}), None)
+    scored = await scorer.score_all([_job()])
+    assert scored[0].fit is not None
+    assert scored[0].fit.fit_score == 72
+    assert scorer.errors == 0
+
+
+@respx.mock
+async def test_scorer_is_enabled_for_a_local_backend_with_no_key_anywhere(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FitScorer.enabled read `cfg.api_key` directly, so on a machine with no
+    ANTHROPIC_API_KEY the ollama backend scored nothing — the precise failure
+    the plugin exists to prevent. It passes on a developer's machine because
+    the env var happens to be set there."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    respx.post("http://localhost:11434/api/chat").mock(
+        return_value=httpx.Response(
+            200, json={"message": {"content": __import__("json").dumps(VERDICT_JSON)}}
+        )
+    )
+    cfg = LLMConfig(enabled=True, backend="ollama", model="qwen2.5:7b")
+    assert cfg.api_key == "", "no key on this machine"
+    scorer = FitScorer(cfg, ProfileConfig(), CVLibrary({}), None)
+    assert scorer.enabled is True, "a local backend needs no key"
+    scored = await scorer.score_all([_job()])
+    assert scored[0].fit is not None and scored[0].fit.fit_score == 72
+
+
+def test_backends_command_lists_both_and_flags_which_need_a_key() -> None:
+    from typer.testing import CliRunner
+
+    from jobscan.cli import app
+
+    result = CliRunner().invoke(app, ["backends"])
+    assert result.exit_code == 0, result.output
+    assert "anthropic" in result.output and "ollama" in result.output
+    assert "ANTHROPIC_API_KEY" in result.output
+
+
+def test_the_unverified_ollama_backend_says_so_where_it_is_chosen() -> None:
+    """The backend was written to Ollama's documented API and tested against a
+    mock, which proves the request shape but not the contract. That caveat is
+    only useful where someone picks a backend, so it lives in the description
+    `jobscan backends` prints — not just in a note somewhere. Delete this test
+    when the backend has been run against a live server, and the caveat with it.
+    """
+    from typer.testing import CliRunner
+
+    from jobscan.cli import app
+
+    out = CliRunner().invoke(app, ["backends"]).output.casefold()
+    assert "not yet verified" in out

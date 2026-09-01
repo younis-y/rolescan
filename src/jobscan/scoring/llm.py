@@ -1,0 +1,192 @@
+"""Stage two: LLM fit scoring and CV matching.
+
+Uses the Claude API's structured outputs, so `FitVerdict` comes back as a
+validated pydantic object rather than JSON that has to be coaxed out of prose.
+The schema is enforced by grammar-constrained sampling at the API, which means
+no parse-retry loop and no defensive JSON repair.
+
+Three things keep this cheap:
+  * the keyword prefilter, so only plausible roles get here at all
+  * a persistent verdict cache keyed on the description text
+  * a hard per-run call ceiling
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import TYPE_CHECKING
+
+from jobscan.config import LLMConfig, ProfileConfig
+from jobscan.models import FitVerdict, ScoredJob
+from jobscan.scoring.cv import CVLibrary
+from jobscan.scoring.judges import Judge, get_judge
+
+if TYPE_CHECKING:
+    from jobscan.store import Store
+
+__all__ = ["FitScorer"]
+
+log = logging.getLogger(__name__)
+
+SYSTEM = """\
+You screen job postings for one specific candidate. You are blunt and useful, \
+not encouraging. A generous score wastes their week.
+
+<candidate>
+{summary}
+</candidate>
+
+Their tailored CV variants:
+
+{cvs}
+
+Scoring guidance:
+- 85-100: strong match, apply today.
+- 65-84: worth applying, some gaps.
+- 40-64: stretch or partial match, only if the pipeline is thin.
+- 0-39: not a good use of their time.
+
+Be strict about seniority. A role wanting eight years is not a 70 for someone \
+with one internship and a master's, however well the keywords line up.
+
+Set verdict to "blocked" ONLY for hard structural bars the candidate cannot \
+clear by being a better applicant: a nationality requirement such as an \
+Emiratisation "UAE National" or "National Talent programme" posting, a \
+security clearance, or a work authorisation they do not hold. A blocked role \
+should also get a low fit_score. Being underqualified is "skip", not "blocked".
+
+For tailoring, name concrete edits to the chosen CV: which bullet to change and \
+to what. "Tailor your CV" is useless. "Lead the internship bullet with the data \
+quality monitoring, since the posting names observability twice" is useful.
+"""
+
+USER = """\
+<posting>
+Title: {title}
+Company: {company}
+Location: {location}
+Posted: {posted}
+
+{description}
+</posting>
+
+Score this posting for the candidate."""
+
+
+class FitScorer:
+    """Scores postings with Claude, with caching and a spend ceiling."""
+
+    def __init__(
+        self,
+        cfg: LLMConfig,
+        profile: ProfileConfig,
+        cvs: CVLibrary,
+        store: Store | None = None,
+    ) -> None:
+        self.cfg = cfg
+        self.profile = profile
+        self.cvs = cvs
+        self.store = store
+        self._sem = asyncio.Semaphore(cfg.max_concurrent)
+        self._calls = 0
+        self._errors = 0
+        self._first_error = ""
+        self._judge: Judge | None = None
+
+    @property
+    def enabled(self) -> bool:
+        """Whether scoring will actually run.
+
+        Asking for a key unconditionally disabled every local backend on any
+        machine that had none — which is every machine the local backends
+        exist for. LLMConfig already switches itself off when a hosted backend
+        has no key, so by this point cfg.enabled is the whole answer.
+        """
+        return self.cfg.enabled
+
+    @property
+    def calls_made(self) -> int:
+        return self._calls
+
+    @property
+    def errors(self) -> int:
+        """Scoring calls that raised. Counted so a scan whose every call failed
+        cannot be mistaken for a deliberate keyword-only run."""
+        return self._errors
+
+    @property
+    def first_error(self) -> str:
+        return self._first_error
+
+    def _get_judge(self) -> Judge:
+        """Built lazily so importing jobscan never costs an SDK import, and so
+        the keyword-only path works with no backend installed at all."""
+        if self._judge is None:
+            self._judge = get_judge(self.cfg.backend, self.cfg)
+        return self._judge
+
+    def _system(self) -> str:
+        return SYSTEM.format(
+            summary=self.profile.summary or "(no summary configured)",
+            cvs=self.cvs.prompt_block(),
+        )
+
+    async def score_all(self, jobs: list[ScoredJob]) -> list[ScoredJob]:
+        """Score every job, in ranked order so the budget buys the best ones.
+
+        If the call ceiling bites, it bites on the weakest candidates. Anything
+        not scored keeps its keyword score and is still reported.
+        """
+        if not self.enabled or not jobs:
+            return jobs
+        ordered = sorted(jobs, key=lambda s: -s.keyword_score)
+        results = await asyncio.gather(
+            *(self._score_one(s) for s in ordered), return_exceptions=True
+        )
+        out: list[ScoredJob] = []
+        for original, result in zip(ordered, results, strict=True):
+            if isinstance(result, BaseException):
+                log.warning("scoring failed for %s: %s", original.job.title, result)
+                self._errors += 1
+                if not self._first_error:
+                    self._first_error = f"{type(result).__name__}: {result}"[:160]
+                out.append(original)
+            else:
+                out.append(result)
+        return out
+
+    async def _score_one(self, scored: ScoredJob) -> ScoredJob:
+        job = scored.job
+
+        if self.store is not None:
+            cached = await self.store.get_verdict(job.content_hash, self.cfg.cache_days)
+            if cached is not None:
+                return scored.model_copy(update={"fit": cached, "llm_cached": True})
+
+        async with self._sem:
+            if self._calls >= self.cfg.max_calls_per_run:
+                log.info(
+                    "LLM call ceiling reached, leaving %r on keyword score", job.title
+                )
+                return scored
+            self._calls += 1
+            verdict = await self._call(scored)
+
+        if self.store is not None:
+            await self.store.put_verdict(job.content_hash, verdict)
+        return scored.model_copy(update={"fit": verdict})
+
+    async def _call(self, scored: ScoredJob) -> FitVerdict:
+        job = scored.job
+        user = USER.format(
+            title=job.title,
+            company=job.company,
+            location=job.location or "not stated",
+            posted=job.posted.isoformat() if job.posted else "not stated",
+            description=(
+                job.description[: self.cfg.description_chars]
+                or "(no description provided by the source)"
+            ),
+        )
+        return await self._get_judge().verdict(self._system(), user)
