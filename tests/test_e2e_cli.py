@@ -13,6 +13,7 @@ import pytest
 import respx
 from typer.testing import CliRunner
 
+from conftest import plain
 from jobscan.cli import app
 
 runner = CliRunner()
@@ -73,13 +74,13 @@ def test_help_lists_every_command() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     for command in ("scan", "discover", "sources", "cvs", "show", "stats", "prune"):
-        assert command in result.output
+        assert command in plain(result.output)
 
 
 def test_missing_config_exits_cleanly(tmp_path: Path) -> None:
     result = runner.invoke(app, ["scan", "-c", str(tmp_path / "nope.yaml")])
     assert result.exit_code == 2
-    assert "No config" in result.output
+    assert "No config" in plain(result.output)
 
 
 @respx.mock
@@ -134,14 +135,14 @@ def test_cvs_command_reads_variants(tmp_path: Path) -> None:
     cfg = _project(tmp_path)
     result = runner.invoke(app, ["cvs", "-c", str(cfg)])
     assert result.exit_code == 0
-    assert "CV_Energy" in result.output
+    assert "CV_Energy" in plain(result.output)
 
 
 def test_stats_reports_zero_on_a_fresh_store(tmp_path: Path) -> None:
     cfg = _project(tmp_path)
     result = runner.invoke(app, ["stats", "-c", str(cfg)])
     assert result.exit_code == 0
-    assert "0 postings" in result.output
+    assert "0 postings" in plain(result.output)
 
 
 @respx.mock
@@ -152,10 +153,10 @@ def test_discover_marks_good_and_bad_slugs(tmp_path: Path) -> None:
     )
     result = runner.invoke(app, ["discover", "-c", str(cfg)])
     assert result.exit_code == 0
-    assert "FAIL" in result.output
-    assert "0 verified" in result.output
-    assert "1 broken" in result.output
-    assert "boards.greenhouse.io" in result.output, "should print the slug hint"
+    assert "FAIL" in plain(result.output)
+    assert "0 verified" in plain(result.output)
+    assert "1 broken" in plain(result.output)
+    assert "boards.greenhouse.io" in plain(result.output), "should print the slug hint"
 
 
 @respx.mock
@@ -182,11 +183,11 @@ def test_discover_never_reports_an_unverifiable_slug_as_working(
 
     result = runner.invoke(app, ["discover", "-c", str(cfg)])
     assert result.exit_code == 0, result.output
-    assert "UNKNOWN" in result.output, "the ghost slug must not read as OK"
-    assert "SKIPPED" in result.output, "keyless Adzuna must not read as OK"
-    assert "1 verified" in result.output
-    assert "1 unverifiable" in result.output
-    assert "1 skipped" in result.output
+    assert "UNKNOWN" in plain(result.output), "the ghost slug must not read as OK"
+    assert "SKIPPED" in plain(result.output), "keyless Adzuna must not read as OK"
+    assert "1 verified" in plain(result.output)
+    assert "1 unverifiable" in plain(result.output)
+    assert "1 skipped" in plain(result.output)
 
 
 @respx.mock
@@ -204,4 +205,4 @@ def test_discover_marks_disabled_sources(tmp_path: Path) -> None:
     )
     result = runner.invoke(app, ["discover", "-c", str(cfg)])
     assert result.exit_code == 0
-    assert "disabled" in result.output, "probing a disabled source must say so"
+    assert "disabled" in plain(result.output), "probing a disabled source must say so"

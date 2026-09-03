@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -74,3 +75,17 @@ def gated_job() -> Job:
         ),
         posted="2026-08-22",
     )
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def plain(text: str) -> str:
+    """Strip ANSI escapes from rendered CLI output.
+
+    `rich` decides whether to style from the environment, and a shell that
+    exports FORCE_COLOR (Claude Code and several CI runners do) makes it emit
+    escapes even when the output is captured. Setting no_color is not enough:
+    table titles still carry an italic sequence. Assertions on CLI text should
+    compare against normalised text rather than depend on the caller's terminal.
+    """
+    return _ANSI.sub("", text)
