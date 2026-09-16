@@ -3,20 +3,20 @@
 [![ci](https://github.com/younis-y/jobscan/actions/workflows/ci.yml/badge.svg)](https://github.com/younis-y/jobscan/actions/workflows/ci.yml)
 
 A job scanner that reads employers' own career sites, scores postings against
-your CV, and writes a ranked digest — spending an LLM call only on the small
+your CV, and writes a ranked digest, spending an LLM call only on the small
 minority that survive a deterministic prefilter.
 
 **That prefilter is the design point.** On one real run it scanned 526 unique
-postings across 9 employer sources and discarded 490 of them — **93%** — on
+postings across 9 employer sources and discarded 490 of them (**93%**) on
 deterministic keyword rules before any model was invoked, leaving 36 to score.
 The expensive stage sees a fortieth of the traffic, and the cheap stage is
 reproducible and free to re-run.
 
 Both the sources and the scoring backends load through **entry points**, so
 adding an ATS adapter or swapping Claude for a local Ollama model is a plugin,
-not a fork. **164 tests run offline** against `respx`-mocked transport — the real
+not a fork. **164 tests run offline** against `respx`-mocked transport: the real
 HTTP clients and real parsers are exercised against recorded response shapes
-rather than stubbed out — and `mypy` runs strict across `src` and `tests`.
+rather than stubbed out. `mypy` runs strict across `src` and `tests`.
 
 
 ## Quickstart
@@ -102,7 +102,7 @@ either as the test.
 
 With `llm.enabled: false`, or with no key and no local model, you get stage one
 alone. If a configured backend fails, the digest says so rather than quietly
-serving keyword scores that look like a normal run — there is a test that
+serving keyword scores that look like a normal run. There is a test that
 asserts exactly this.
 
 ## What you must supply
@@ -139,7 +139,7 @@ as `examples/energy-trading.yaml`:
 The counters and the per-source outcome footer from that run are reproduced in
 `examples/run-summary.md`. The ranked postings are not: a digest records one
 person's job search, and that is not something to publish. This is one
-measurement against one source list, not a benchmark — the discard rate is a
+measurement against one source list, not a benchmark. The discard rate is a
 function of how tightly you write your keywords.
 
 ## Commands
@@ -179,8 +179,8 @@ What this does not claim:
 - **Public endpoints only.** Nothing behind a login, no session cookies, no
   captcha solving, no scraping of anything a careers page does not serve to an
   anonymous browser.
-- **Five ATS platforms have first-class adapters** — Greenhouse, Lever, Ashby,
-  Workable, SmartRecruiters — plus Workday, which needs three values rather
+- **Five ATS platforms have first-class adapters**: Greenhouse, Lever, Ashby,
+  Workable and SmartRecruiters, plus Workday, which needs three values rather
   than a slug. Everything else is reached through the generic schema.org source
   or not at all.
 - **The slug dataset is third-party, incomplete and not redistributable.** It
@@ -218,7 +218,7 @@ strict over `src` and `tests`.
 The suite is offline by construction: HTTP is mocked with `respx`, so tests
 exercise the real client and the real parsers against recorded payloads rather
 than stubs. mypy runs in strict mode over `src` and `tests`. CI runs all three
-on Python 3.11 and 3.12 — see `.github/workflows/ci.yml`.
+on Python 3.11 and 3.12. See `.github/workflows/ci.yml`.
 
 ## Licence
 
