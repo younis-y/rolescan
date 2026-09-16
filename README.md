@@ -19,6 +19,19 @@ HTTP clients and real parsers are exercised against recorded response shapes
 rather than stubbed out — and `mypy` runs strict across `src` and `tests`.
 
 
+## Quickstart
+
+```bash
+pip install -e ".[dev]"
+pytest                                    # 164 tests, no network
+cp config.example.yaml config.yaml        # then edit sources and profile
+jobscan discover                          # probe the sources you configured
+jobscan scan --no-llm                     # keyword-only run, no API key needed
+```
+
+`--no-llm` gets you a ranked digest on the deterministic prefilter alone, so the
+tool is useful before you supply a key. See [What you must supply](#what-you-must-supply).
+
 ## The two decisions worth reading the code for
 
 **A deterministic prefilter runs before anything expensive.** Scoring is two
