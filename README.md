@@ -1,6 +1,6 @@
 # jobscan
 
-[![ci](https://github.com/younis-y/jobscan/actions/workflows/ci.yml/badge.svg)](https://github.com/younis-y/jobscan/actions/workflows/ci.yml)
+[![ci](https://github.com/younis-y/rolescan/actions/workflows/ci.yml/badge.svg)](https://github.com/younis-y/rolescan/actions/workflows/ci.yml)
 
 A job scanner that reads employers' own career sites, scores postings against
 your CV, and writes a ranked digest, spending an LLM call only on the small
