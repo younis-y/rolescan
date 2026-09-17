@@ -31,9 +31,9 @@ from xml.etree import ElementTree
 
 import extruct
 
-from jobscan.http import FetchError
-from jobscan.models import Job
-from jobscan.sources.base import (
+from rolescan.http import FetchError
+from rolescan.models import Job
+from rolescan.sources.base import (
     ProbeResult,
     ProbeStatus,
     Source,
@@ -249,7 +249,7 @@ class Structured(Source):
 
         The inherited probe calls fetch(), which here means a detail request
         per posting: 170 requests and roughly 212MB for ADNOC every time
-        `jobscan discover` runs. The sitemap already carries the count, and a
+        `rolescan discover` runs. The sitemap already carries the count, and a
         single sample is enough to prove the pages actually carry markup.
         """
         if not self.sitemap_url:

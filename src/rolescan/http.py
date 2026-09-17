@@ -15,7 +15,7 @@ from typing import Any, Self
 
 import httpx
 
-from jobscan.config import HTTPConfig
+from rolescan.config import HTTPConfig
 
 __all__ = ["FetchError", "Fetcher"]
 

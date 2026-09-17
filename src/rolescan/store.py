@@ -28,7 +28,7 @@ from typing import Self
 import aiosqlite
 from pydantic import ValidationError
 
-from jobscan.models import FitVerdict, Job, ScoredJob
+from rolescan.models import FitVerdict, Job, ScoredJob
 
 __all__ = ["Store"]
 

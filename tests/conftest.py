@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from jobscan.config import Config, ProfileConfig
-from jobscan.models import Job
+from rolescan.config import Config, ProfileConfig
+from rolescan.models import Job
 
 FIXTURE_CONFIG = """
 profile:

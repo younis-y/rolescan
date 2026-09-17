@@ -19,9 +19,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from jobscan.http import FetchError
-from jobscan.models import Job
-from jobscan.sources.base import Source, register, strip_html
+from rolescan.http import FetchError
+from rolescan.models import Job
+from rolescan.sources.base import Source, register, strip_html
 
 __all__ = ["Workday"]
 

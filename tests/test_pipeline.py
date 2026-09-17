@@ -5,9 +5,9 @@ from pathlib import Path
 import httpx
 import respx
 
-from jobscan.config import Config
-from jobscan.digest import render_markdown
-from jobscan.models import (
+from rolescan.config import Config
+from rolescan.digest import render_markdown
+from rolescan.models import (
     Confidence,
     CVVariant,
     FitVerdict,
@@ -15,7 +15,7 @@ from jobscan.models import (
     ScoredJob,
     Verdict,
 )
-from jobscan.pipeline import ScanResult, SourceReport, deduplicate, run_scan
+from rolescan.pipeline import ScanResult, SourceReport, deduplicate, run_scan
 
 
 def _payload(title: str, content: str, jid: int = 1) -> dict[str, object]:
@@ -221,7 +221,7 @@ def test_digest_surfaces_failed_sources() -> None:
     )
     out = render_markdown(result)
     assert "greenhouse/dead" in out
-    assert "jobscan discover" in out
+    assert "rolescan discover" in out
 
 
 def test_dry_run_is_labelled_in_the_digest(energy_job: Job) -> None:

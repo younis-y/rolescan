@@ -11,7 +11,7 @@ import logging
 import re
 from pathlib import Path
 
-from jobscan.models import CVVariant
+from rolescan.models import CVVariant
 
 __all__ = ["CVLibrary", "strip_latex"]
 

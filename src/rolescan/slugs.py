@@ -9,7 +9,7 @@ Feashliaa/job-board-aggregator, which publishes `data/*_companies.json`, one
 file per ATS, holding on the order of 95,000 company identifiers, refreshed
 daily. It is CC BY-NC 4.0, so personal use is fine and commercial use is not.
 
-Download those files anywhere, point `jobscan slugs` at the directory, and
+Download those files anywhere, point `rolescan slugs` at the directory, and
 search it. The reader is deliberately format-tolerant: it accepts a bare list
 of slugs, a list of objects, or a mapping, because a third-party dataset can
 restructure at any time and a rigid parser would break on the next refresh.
@@ -29,7 +29,7 @@ __all__ = ["Candidate", "SlugIndex", "normalise"]
 
 log = logging.getLogger(__name__)
 
-#: Filename stem fragment -> jobscan source kind.
+#: Filename stem fragment -> rolescan source kind.
 KIND_HINTS: dict[str, str] = {
     "greenhouse": "greenhouse",
     "lever": "lever",

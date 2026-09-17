@@ -1,7 +1,7 @@
 """LLM backends, as plugins.
 
 Every source except Adzuna is a public endpoint and keyword scoring is pure
-Python, so the LLM stage is the only part of jobscan that ever needed a
+Python, so the LLM stage is the only part of rolescan that ever needed a
 credential. Making it a plugin keeps the tool useful with none: run the
 keyword prefilter alone, point it at a local model, or supply an API key —
 the pipeline, the cache, the digest and the CV matching are identical either
@@ -12,8 +12,8 @@ Everything expensive and easy to get wrong — the verdict cache, the spend
 ceiling, concurrency, ordering, error counting — stays in FitScorer, so a new
 backend is one method rather than a fork of the scorer.
 
-Registration mirrors `jobscan.sources`: subclass, decorate with @register, or
-ship one from another package under the `jobscan.judges` entry-point group.
+Registration mirrors `rolescan.sources`: subclass, decorate with @register, or
+ship one from another package under the `rolescan.judges` entry-point group.
 """
 
 from __future__ import annotations
@@ -23,8 +23,8 @@ from abc import ABC, abstractmethod
 from importlib.metadata import entry_points
 from typing import Any, ClassVar
 
-from jobscan.config import LLMConfig
-from jobscan.models import FitVerdict
+from rolescan.config import LLMConfig
+from rolescan.models import FitVerdict
 
 __all__ = ["Judge", "available_judges", "get_judge", "register"]
 
@@ -41,7 +41,7 @@ class Judge(ABC):
     #: LLMConfig, so a local backend is not disabled for want of a key it never
     #: needed.
     needs_api_key: ClassVar[bool] = False
-    #: One line, shown by `jobscan backends`.
+    #: One line, shown by `rolescan backends`.
     description: ClassVar[str] = ""
 
     def __init__(self, cfg: LLMConfig) -> None:
@@ -66,7 +66,7 @@ def register(cls: type[Judge]) -> type[Judge]:
 def load_plugins() -> None:
     """Pull in any third-party judges advertising the entry-point group."""
     try:
-        eps = entry_points(group="jobscan.judges")
+        eps = entry_points(group="rolescan.judges")
     except Exception:  # pragma: no cover - importlib differences across runtimes
         return
     for ep in eps:
@@ -115,7 +115,7 @@ class AnthropicJudge(Judge):
         self._client: Any = None
 
     def _get_client(self) -> Any:
-        """Built lazily so importing jobscan never costs an SDK import, and so
+        """Built lazily so importing rolescan never costs an SDK import, and so
         the keyword-only path works with anthropic absent."""
         if self._client is None:
             from anthropic import AsyncAnthropic

@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
-from jobscan.models import (
+from rolescan.models import (
     Confidence,
     CVVariant,
     FitVerdict,

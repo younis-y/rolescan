@@ -16,12 +16,12 @@ import httpx
 import pytest
 import respx
 
-from jobscan.config import HTTPConfig, SourceEntry
-from jobscan.http import Fetcher
-from jobscan.models import Job
-from jobscan.sources import get_source
-from jobscan.sources.base import ProbeStatus
-from jobscan.store import Store
+from rolescan.config import HTTPConfig, SourceEntry
+from rolescan.http import Fetcher
+from rolescan.models import Job
+from rolescan.sources import get_source
+from rolescan.sources.base import ProbeStatus
+from rolescan.store import Store
 
 SITEMAP_URL = "https://jobs.example.ae/sitemap.xml"
 JOB1 = "https://jobs.example.ae/us/en/job/32712/senior-analyst"
@@ -275,7 +275,7 @@ async def test_delay_is_applied_between_detail_fetches(
     async def fake_sleep(seconds: float) -> None:
         slept.append(seconds)
 
-    monkeypatch.setattr("jobscan.sources.structured.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("rolescan.sources.structured.asyncio.sleep", fake_sleep)
     respx.get(SITEMAP_URL).mock(
         return_value=httpx.Response(200, text=sitemap((JOB1, "x"), (JOB2, "x")))
     )
@@ -348,7 +348,7 @@ async def test_an_unparseable_date_is_dropped_not_fatal() -> None:
 async def test_probe_reads_the_sitemap_and_one_sample_not_every_page() -> None:
     """`probe` inherited from Source calls fetch(), which for this source means
     every detail page: 170 requests and ~212MB for ADNOC, just to run
-    `jobscan discover`. It needs the sitemap plus one sample, and no more."""
+    `rolescan discover`. It needs the sitemap plus one sample, and no more."""
     respx.get(SITEMAP_URL).mock(
         return_value=httpx.Response(
             200, text=sitemap((JOB1, "x"), (JOB2, "x"), (NOT_A_JOB, "x"))

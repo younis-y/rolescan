@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from jobscan.config import ProfileConfig
-from jobscan.models import CVVariant, Job
-from jobscan.scoring import score_keywords
-from jobscan.scoring.cv import CVLibrary, strip_latex
-from jobscan.scoring.keyword import TITLE_MULTIPLIER
+from rolescan.config import ProfileConfig
+from rolescan.models import CVVariant, Job
+from rolescan.scoring import score_keywords
+from rolescan.scoring.cv import CVLibrary, strip_latex
+from rolescan.scoring.keyword import TITLE_MULTIPLIER
 
 TEX = r"""
 \documentclass[11pt]{article}

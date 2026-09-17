@@ -1,5 +1,5 @@
 [project]
-name = "jobscan"
+name = "rolescan"
 version = "2.2.0"
 description = "Typed, async, plugin-based job scanner with LLM fit scoring and CV variant matching"
 readme = "README.md"
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The Claude backend is optional: jobscan runs on keyword scoring, or on a
+# The Claude backend is optional: rolescan runs on keyword scoring, or on a
 # local model via Ollama, with no extra install and no credentials.
 anthropic = ["anthropic>=1.0"]
 dev = [
@@ -31,30 +31,30 @@ dev = [
 ]
 
 [project.scripts]
-jobscan = "jobscan.cli:app"
+rolescan = "rolescan.cli:app"
 
 # Third-party packages can ship extra sources by advertising this group.
-# jobscan discovers and registers them at import time; no core changes needed.
-[project.entry-points."jobscan.judges"]
-anthropic = "jobscan.scoring.judges:AnthropicJudge"
-ollama = "jobscan.scoring.judges:OllamaJudge"
+# rolescan discovers and registers them at import time; no core changes needed.
+[project.entry-points."rolescan.judges"]
+anthropic = "rolescan.scoring.judges:AnthropicJudge"
+ollama = "rolescan.scoring.judges:OllamaJudge"
 
-[project.entry-points."jobscan.sources"]
-smartrecruiters = "jobscan.sources.ats:SmartRecruiters"
-greenhouse = "jobscan.sources.ats:Greenhouse"
-lever = "jobscan.sources.ats:Lever"
-ashby = "jobscan.sources.ats:Ashby"
-workable = "jobscan.sources.ats:Workable"
-workday = "jobscan.sources.workday:Workday"
-structured = "jobscan.sources.structured:Structured"
-adzuna = "jobscan.sources.adzuna:Adzuna"
+[project.entry-points."rolescan.sources"]
+smartrecruiters = "rolescan.sources.ats:SmartRecruiters"
+greenhouse = "rolescan.sources.ats:Greenhouse"
+lever = "rolescan.sources.ats:Lever"
+ashby = "rolescan.sources.ats:Ashby"
+workable = "rolescan.sources.ats:Workable"
+workday = "rolescan.sources.workday:Workday"
+structured = "rolescan.sources.structured:Structured"
+adzuna = "rolescan.sources.adzuna:Adzuna"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/jobscan"]
+packages = ["src/rolescan"]
 
 # ---------------------------------------------------------------------------
 # Ruff: lint + format, replacing flake8, black, isort, pyupgrade
@@ -89,7 +89,7 @@ ignore = [
 "tests/*" = ["ANN", "E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["jobscan"]
+known-first-party = ["rolescan"]
 
 # ---------------------------------------------------------------------------
 # mypy: strict. ty is the emerging Astral checker but is still preview in 2026,

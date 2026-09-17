@@ -11,8 +11,8 @@ something useful rather than to nothing.
 
 from __future__ import annotations
 
-from jobscan.config import ProfileConfig
-from jobscan.models import Job, ScoredJob
+from rolescan.config import ProfileConfig
+from rolescan.models import Job, ScoredJob
 
 __all__ = ["TITLE_MULTIPLIER", "score_keywords"]
 

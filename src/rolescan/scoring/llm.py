@@ -17,13 +17,13 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from jobscan.config import LLMConfig, ProfileConfig
-from jobscan.models import FitVerdict, ScoredJob
-from jobscan.scoring.cv import CVLibrary
-from jobscan.scoring.judges import Judge, get_judge
+from rolescan.config import LLMConfig, ProfileConfig
+from rolescan.models import FitVerdict, ScoredJob
+from rolescan.scoring.cv import CVLibrary
+from rolescan.scoring.judges import Judge, get_judge
 
 if TYPE_CHECKING:
-    from jobscan.store import Store
+    from rolescan.store import Store
 
 __all__ = ["FitScorer"]
 
@@ -120,7 +120,7 @@ class FitScorer:
         return self._first_error
 
     def _get_judge(self) -> Judge:
-        """Built lazily so importing jobscan never costs an SDK import, and so
+        """Built lazily so importing rolescan never costs an SDK import, and so
         the keyword-only path works with no backend installed at all."""
         if self._judge is None:
             self._judge = get_judge(self.cfg.backend, self.cfg)

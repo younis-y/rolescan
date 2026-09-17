@@ -12,10 +12,10 @@ import httpx
 import pytest
 import respx
 
-from jobscan.config import LLMConfig, ProfileConfig
-from jobscan.models import FitVerdict, Job, ScoredJob
-from jobscan.scoring import CVLibrary, FitScorer
-from jobscan.scoring.judges import available_judges, get_judge
+from rolescan.config import LLMConfig, ProfileConfig
+from rolescan.models import FitVerdict, Job, ScoredJob
+from rolescan.scoring import CVLibrary, FitScorer
+from rolescan.scoring.judges import available_judges, get_judge
 
 VERDICT_JSON = {
     "fit_score": 72,
@@ -171,7 +171,7 @@ async def test_scorer_is_enabled_for_a_local_backend_with_no_key_anywhere(
 def test_backends_command_lists_both_and_flags_which_need_a_key() -> None:
     from typer.testing import CliRunner
 
-    from jobscan.cli import app
+    from rolescan.cli import app
 
     result = CliRunner().invoke(app, ["backends"])
     assert result.exit_code == 0, result.output
@@ -183,12 +183,12 @@ def test_the_unverified_ollama_backend_says_so_where_it_is_chosen() -> None:
     """The backend was written to Ollama's documented API and tested against a
     mock, which proves the request shape but not the contract. That caveat is
     only useful where someone picks a backend, so it lives in the description
-    `jobscan backends` prints — not just in a note somewhere. Delete this test
+    `rolescan backends` prints — not just in a note somewhere. Delete this test
     when the backend has been run against a live server, and the caveat with it.
     """
     from typer.testing import CliRunner
 
-    from jobscan.cli import app
+    from rolescan.cli import app
 
     out = CliRunner().invoke(app, ["backends"]).output.casefold()
     assert "not yet verified" in out

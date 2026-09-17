@@ -13,16 +13,16 @@ from rich.logging import RichHandler
 from rich.markdown import Markdown
 from rich.table import Table
 
-from jobscan.config import Config, SourceEntry
-from jobscan.digest import render_markdown, send_email, write_digest
-from jobscan.http import Fetcher
-from jobscan.models import Verdict
-from jobscan.pipeline import run_scan
-from jobscan.scoring import CVLibrary
-from jobscan.slugs import SlugIndex
-from jobscan.sources import available, get_source
-from jobscan.sources.base import ProbeResult, ProbeStatus
-from jobscan.store import Store
+from rolescan.config import Config, SourceEntry
+from rolescan.digest import render_markdown, send_email, write_digest
+from rolescan.http import Fetcher
+from rolescan.models import Verdict
+from rolescan.pipeline import run_scan
+from rolescan.scoring import CVLibrary
+from rolescan.slugs import SlugIndex
+from rolescan.sources import available, get_source
+from rolescan.sources.base import ProbeResult, ProbeStatus
+from rolescan.store import Store
 
 app = typer.Typer(
     add_completion=False,
@@ -230,7 +230,7 @@ def slugs(
         for line in paste:
             console.print(f"[cyan]{line}[/]")
         console.print(
-            "\n[dim]Verify with `jobscan discover` before trusting these. "
+            "\n[dim]Verify with `rolescan discover` before trusting these. "
             "Workday entries need a real `site` value from the careers URL.[/]"
         )
 
@@ -239,11 +239,11 @@ def slugs(
 def backends() -> None:
     """List the LLM scoring backends, and which of them need a credential.
 
-    jobscan runs with no credentials at all: every source but Adzuna is a
+    rolescan runs with no credentials at all: every source but Adzuna is a
     public endpoint and keyword scoring is pure Python. The backend below is
     only for the optional second stage.
     """
-    from jobscan.scoring import available_judges
+    from rolescan.scoring import available_judges
 
     table = Table(title="LLM backends", show_edge=False, header_style="bold")
     table.add_column("Name")
@@ -295,7 +295,7 @@ def show(config: ConfigOpt = Path("config.yaml")) -> None:
     cfg = _load(config)
     path = cfg.resolve(cfg.output.dir) / "latest.md"
     if not path.is_file():
-        console.print("[yellow]No digest yet. Run `jobscan scan`.[/]")
+        console.print("[yellow]No digest yet. Run `rolescan scan`.[/]")
         raise typer.Exit(1)
     console.print(Markdown(path.read_text(encoding="utf-8")))
 

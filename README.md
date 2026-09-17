@@ -1,4 +1,4 @@
-# jobscan
+# rolescan
 
 [![ci](https://github.com/younis-y/rolescan/actions/workflows/ci.yml/badge.svg)](https://github.com/younis-y/rolescan/actions/workflows/ci.yml)
 
@@ -25,8 +25,8 @@ rather than stubbed out. `mypy` runs strict across `src` and `tests`.
 pip install -e ".[dev]"
 pytest                                    # 164 tests, no network
 cp config.example.yaml config.yaml        # then edit sources and profile
-jobscan discover                          # probe the sources you configured
-jobscan scan --no-llm                     # keyword-only run, no API key needed
+rolescan discover                          # probe the sources you configured
+rolescan scan --no-llm                     # keyword-only run, no API key needed
 ```
 
 `--no-llm` gets you a ranked digest on the deterministic prefilter alone, so the
@@ -44,7 +44,7 @@ single model call. The ordering is the point: the cheap stage is not a
 nicety, it is what decides the cost of the tool.
 
 **Sources and LLM backends are both entry-point plugins.** They register
-through `importlib.metadata` under the `jobscan.sources` and `jobscan.judges`
+through `importlib.metadata` under the `rolescan.sources` and `rolescan.judges`
 groups, declared in `pyproject.toml`. A third-party package can ship a new ATS
 adapter or a new model backend without touching pipeline code, and the pipeline
 holds no knowledge of either. Adding an employer on an already-supported
@@ -54,12 +54,12 @@ platform is a line of config and no code at all.
 
 Aggregators are late, partial, and full of recruiters. Postings arrive first on
 the employer's own site, which is backed by an applicant-tracking system with a
-public JSON API. jobscan reads those directly, so a role shows up the day it is
+public JSON API. rolescan reads those directly, so a role shows up the day it is
 posted, from the source, with the real apply link.
 
 The hard part is not fetching. It is knowing that Octopus Energy's board is
-`octoenergy` on Lever and not `octopus` on Greenhouse. `jobscan slugs` and
-`jobscan discover` exist for exactly that.
+`octoenergy` on Lever and not `octopus` on Greenhouse. `rolescan slugs` and
+`rolescan discover` exist for exactly that.
 
 ## What it reads
 
@@ -82,7 +82,7 @@ fit, flags hard eligibility bars, and names concrete edits to make. Verdicts
 are cached on a content hash of the posting text, so re-running costs nothing
 for unchanged postings.
 
-The backend is a plugin. `jobscan backends` lists what is registered:
+The backend is a plugin. `rolescan backends` lists what is registered:
 
 | Name | Needs a key | What it is |
 |---|---|---|
@@ -112,12 +112,12 @@ asserts exactly this.
   working source list for UK and Gulf energy, with a placeholder profile.
 - **Your own API key.** Every secret resolves from the environment when the
   corresponding config field is left blank: `ANTHROPIC_API_KEY`, and optionally
-  `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` and `JOBSCAN_SMTP_PASS`. Nothing is
+  `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` and `ROLESCAN_SMTP_PASS`. Nothing is
   bundled, and `config.yaml` is gitignored so a key pasted there by hand does
   not follow you into a commit.
 - **Your own CV files**, if you want tailoring advice rather than generic
   advice. See `cvs/README.md`.
-- **Your own ATS slug dataset**, if you want `jobscan slugs`. See
+- **Your own ATS slug dataset**, if you want `rolescan slugs`. See
   `ats-data/README.md`. It is CC BY-NC 4.0 and is not bundled here.
 
 Relative paths resolve against the config file, not the working directory, so a
@@ -145,22 +145,22 @@ function of how tightly you write your keywords.
 ## Commands
 
 ```
-jobscan discover     probe every configured source; report OK / EMPTY / UNKNOWN / SKIPPED / FAIL
-jobscan slugs NAME   find a real board slug in a harvested ATS dataset
-jobscan sources      every registered source kind and its slug format
-jobscan backends     every registered LLM backend, and which need a key
-jobscan cvs          which CV variants were found and how they parse
-jobscan scan         fetch, score, write the digest   (--dry, --no-llm, --no-email)
-jobscan show         reprint the latest digest
-jobscan stats        how many postings the store has seen
-jobscan prune        drop stale cached verdicts
+rolescan discover     probe every configured source; report OK / EMPTY / UNKNOWN / SKIPPED / FAIL
+rolescan slugs NAME   find a real board slug in a harvested ATS dataset
+rolescan sources      every registered source kind and its slug format
+rolescan backends     every registered LLM backend, and which need a key
+rolescan cvs          which CV variants were found and how they parse
+rolescan scan         fetch, score, write the digest   (--dry, --no-llm, --no-email)
+rolescan show         reprint the latest digest
+rolescan stats        how many postings the store has seen
+rolescan prune        drop stale cached verdicts
 ```
 
 `discover` distinguishes five outcomes on purpose. `EMPTY` means a real board
 with no openings; `UNKNOWN` means an API that cannot tell an empty board from a
 wrong slug. Collapsing those into a single "OK" hides which of them actually returned postings. ## Finding slugs
 
-`jobscan slugs` searches a harvested ATS directory you download yourself. It
+`rolescan slugs` searches a harvested ATS directory you download yourself. It
 matches on `difflib.SequenceMatcher` with a length-aware cap and a directional
 containment bonus, because absolute name length rather than length ratio is
 what separates `octoenergy` from `octopusenergy` without also collapsing `vitl`
@@ -224,6 +224,6 @@ on Python 3.11 and 3.12. See `.github/workflows/ci.yml`.
 
 MIT. See `LICENSE`.
 
-The harvested ATS directories that `jobscan slugs` reads are not covered by it:
+The harvested ATS directories that `rolescan slugs` reads are not covered by it:
 they come from a third party under CC BY-NC 4.0, are never bundled, and are
 gitignored. See `ats-data/README.md`.

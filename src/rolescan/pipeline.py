@@ -18,13 +18,13 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 
-from jobscan.config import Config, SourceEntry
-from jobscan.http import Fetcher
-from jobscan.models import Job, ScoredJob
-from jobscan.scoring import CVLibrary, FitScorer, score_keywords
-from jobscan.sources import get_source
-from jobscan.sources.base import PostingCache, SourceSkipped
-from jobscan.store import Store
+from rolescan.config import Config, SourceEntry
+from rolescan.http import Fetcher
+from rolescan.models import Job, ScoredJob
+from rolescan.scoring import CVLibrary, FitScorer, score_keywords
+from rolescan.sources import get_source
+from rolescan.sources.base import PostingCache, SourceSkipped
+from rolescan.store import Store
 
 __all__ = ["ScanResult", "SourceReport", "run_scan"]
 

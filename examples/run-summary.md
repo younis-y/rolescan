@@ -1,6 +1,6 @@
 # Sample run summary
 
-The counters and footer from one real `jobscan scan` run, 25 August 2026,
+The counters and footer from one real `rolescan scan` run, 25 August 2026,
 against a private `config.yaml` whose source list is the one reproduced in
 `energy-trading.yaml`.
 
@@ -32,7 +32,7 @@ benchmark.
 - `lever/vitol` FetchError: https://api.lever.co/v0/postings/vitol: HTTP 404
 - `lever/axpo` FetchError: https://api.lever.co/v0/postings/axpo: HTTP 404
 
-Run `jobscan discover` to check the slugs.
+Run `rolescan discover` to check the slugs.
 
 **Sources skipped (not searched)**
 
@@ -54,7 +54,7 @@ Run `jobscan discover` to check the slugs.
   Verdicts are keyed on a content hash of the posting text, so a second run
   over unchanged postings scores nothing.
 - The three 404s were unverified slug guesses, and they are exactly what
-  `jobscan discover` exists to catch before a scan. All three employers were
+  `rolescan discover` exists to catch before a scan. All three employers were
   later resolved onto the right platform — G-Research and Vitol are not on
   Greenhouse or Lever at all, and Axpo publishes schema.org markup through
   Teamtailor. `energy-trading.yaml` records the corrected entries.

@@ -12,10 +12,10 @@ import httpx
 import pytest
 import respx
 
-from jobscan.config import HTTPConfig, SourceEntry
-from jobscan.http import Fetcher
-from jobscan.sources import get_source
-from jobscan.sources.base import ProbeResult, ProbeStatus, SourceSkipped
+from rolescan.config import HTTPConfig, SourceEntry
+from rolescan.http import Fetcher
+from rolescan.sources import get_source
+from rolescan.sources.base import ProbeResult, ProbeStatus, SourceSkipped
 
 SR = "https://api.smartrecruiters.com/v1/companies/{}/postings"
 GH = "https://boards-api.greenhouse.io/v1/boards/{}/jobs"
@@ -145,7 +145,7 @@ async def test_workday_404_points_at_the_site_value() -> None:
 
 
 def test_only_smartrecruiters_is_marked_ambiguous() -> None:
-    from jobscan.sources import available
+    from rolescan.sources import available
 
     ambiguous = {n for n, c in available().items() if c.ambiguous_when_empty}
     assert ambiguous == {"smartrecruiters"}

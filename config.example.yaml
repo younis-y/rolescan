@@ -1,10 +1,10 @@
-# jobscan configuration. Copy to config.yaml and edit.
+# rolescan configuration. Copy to config.yaml and edit.
 #
 # NOTHING HERE REQUIRES A CREDENTIAL. Every source except Adzuna is a public
 # endpoint, and keyword scoring is pure Python. Keys are optional upgrades:
 #   ANTHROPIC_API_KEY   LLM fit scoring and CV tailoring  (or use a local model)
 #   ADZUNA_APP_ID/KEY   one extra aggregator source
-#   JOBSCAN_SMTP_PASS   emailing the digest instead of printing it
+#   ROLESCAN_SMTP_PASS   emailing the digest instead of printing it
 # Secrets are read from the environment, so this file stays safe to commit.
 #
 # Relative paths resolve against THIS FILE, not the working directory, so a
@@ -23,7 +23,7 @@ profile:
     many years of real experience you have.
 
   # Directory of CV variant files (.tex, .md or .txt), named for the variants
-  # in jobscan.models.CVVariant: CV_Energy, CV_Quant, CV_DataEng, CV_MLAI,
+  # in rolescan.models.CVVariant: CV_Energy, CV_Quant, CV_DataEng, CV_MLAI,
   # CV_Electrical, CV_Consulting. Matching ignores case, hyphens and
   # underscores, so CV_ML-AI.tex is fine. Optional — without it the LLM works
   # from the summary alone and gives less specific tailoring advice.
@@ -61,7 +61,7 @@ llm:
   # Set false to score on keywords alone — no key, no network, no bill.
   enabled: true
 
-  # Which backend judges postings. `jobscan backends` lists them.
+  # Which backend judges postings. `rolescan backends` lists them.
   #   anthropic  Claude API. Best quality. Needs ANTHROPIC_API_KEY.
   #              With no key it disables itself and you get keyword scores,
   #              and the digest says so rather than pretending.
@@ -99,11 +99,11 @@ output:
     to: you@example.com
 
 # ---------------------------------------------------------------------------
-# Sources. Run `jobscan sources` for every registered kind and its slug format.
+# Sources. Run `rolescan sources` for every registered kind and its slug format.
 #
 # Finding real slugs is the hard part. Two ways:
-#   jobscan slugs "Octopus Energy"   search a harvested ATS dataset
-#   jobscan discover                 probe what you have configured
+#   rolescan slugs "Octopus Energy"   search a harvested ATS dataset
+#   rolescan discover                 probe what you have configured
 #
 # `verified: true` is a note to yourself that discover confirmed it. See
 # examples/energy-trading.yaml for a fully resolved, working list.

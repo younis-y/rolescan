@@ -1,7 +1,7 @@
 # Worked example: energy trading and energy data science, UK + Gulf.
 #
 # The value here is the SOURCE LIST. Slugs are the hard part of this tool, and
-# every one below was resolved by hand and confirmed with `jobscan discover`
+# every one below was resolved by hand and confirmed with `rolescan discover`
 # — 13 verified, 0 broken. The comments record how each was found, so a wrong
 # guess does not get re-introduced later.
 #
@@ -53,14 +53,14 @@ output:
 # ---------------------------------------------------------------------------
 # Sources.
 #
-# `verified: false` means the slug is a guess. Run `jobscan discover` to find
+# `verified: false` means the slug is a guess. Run `rolescan discover` to find
 # out which are real, then fix or delete the failures.
 #
 # Adding employers is the highest-leverage change you can make to this file.
 # ---------------------------------------------------------------------------
 sources:
   # --- Gulf energy -------------------------------------------------------
-  # Masdar is the only Gulf employer on an ATS jobscan speaks. Checked by hand
+  # Masdar is the only Gulf employer on an ATS rolescan speaks. Checked by hand
   # 2026-08-24: ADNOC is Phenom People, ACWA Power is SAP SuccessFactors, TAQA
   # is Hireserve, Mubadala is Taleo, and EWEC has no careers portal at all.
   # Their SmartRecruiters and Workday entries were guesses and are removed.

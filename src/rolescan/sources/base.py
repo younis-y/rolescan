@@ -2,7 +2,7 @@
 
 A source is any object that can turn a configured slug into a list of Jobs.
 Adding one means subclassing Source and decorating it with @register, or
-shipping it from another package under the `jobscan.sources` entry-point group.
+shipping it from another package under the `rolescan.sources` entry-point group.
 Neither route requires touching pipeline code.
 """
 
@@ -18,9 +18,9 @@ from html.parser import HTMLParser
 from importlib.metadata import entry_points
 from typing import Any, ClassVar, Protocol
 
-from jobscan.config import SourceEntry
-from jobscan.http import Fetcher, FetchError
-from jobscan.models import Job
+from rolescan.config import SourceEntry
+from rolescan.http import Fetcher, FetchError
+from rolescan.models import Job
 
 __all__ = [
     "PostingCache",
@@ -63,7 +63,7 @@ class SourceSkipped(RuntimeError):  # noqa: N818 - a signal, not an error
 
 
 class ProbeStatus(StrEnum):
-    """What `jobscan discover` can honestly conclude about a configured slug.
+    """What `rolescan discover` can honestly conclude about a configured slug.
 
     The three-way split exists because job board APIs disagree about how to
     signal "no such company". Greenhouse, Lever, Ashby and Workable all 404.
@@ -102,7 +102,7 @@ class Source(ABC):
     """Base class for a job board integration."""
 
     name: ClassVar[str] = ""
-    #: Human-readable hint shown by `jobscan discover` when a slug fails.
+    #: Human-readable hint shown by `rolescan discover` when a slug fails.
     slug_hint: ClassVar[str] = ""
     #: Set True when the API returns 200 with an empty collection for a slug
     #: that does not exist, so a zero count cannot be trusted as verification.
@@ -171,7 +171,7 @@ def register(cls: type[Source]) -> type[Source]:
 def load_plugins() -> None:
     """Pull in any third-party sources advertising the entry-point group."""
     try:
-        eps = entry_points(group="jobscan.sources")
+        eps = entry_points(group="rolescan.sources")
     except Exception:  # pragma: no cover - importlib differences across runtimes
         return
     for ep in eps:

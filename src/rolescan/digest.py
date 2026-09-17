@@ -8,9 +8,9 @@ from datetime import UTC, datetime
 from email.message import EmailMessage
 from pathlib import Path
 
-from jobscan.config import EmailConfig
-from jobscan.models import ScoredJob, Verdict
-from jobscan.pipeline import ScanResult
+from rolescan.config import EmailConfig
+from rolescan.models import ScoredJob, Verdict
+from rolescan.pipeline import ScanResult
 
 __all__ = ["render_markdown", "send_email", "write_digest"]
 
@@ -158,7 +158,7 @@ def _failures(result: ScanResult) -> list[str]:
     if failed:
         lines += ["**Sources that failed this run**", ""]
         lines += [f"- `{r.kind}/{r.slug}` {r.error}" for r in failed]
-        lines += ["", "Run `jobscan discover` to check the slugs.", ""]
+        lines += ["", "Run `rolescan discover` to check the slugs.", ""]
     if skipped:
         # Called out separately because a skipped source contributed nothing
         # and is easy to mistake for one that found nothing.

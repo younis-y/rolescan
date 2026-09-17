@@ -76,7 +76,7 @@ class LLMConfig(BaseModel):
     enabled: bool = True
     backend: str = "anthropic"
     """Which LLM plugin scores postings. `anthropic` needs a key; `ollama`
-    runs a local model and needs none. See `jobscan backends`."""
+    runs a local model and needs none. See `rolescan backends`."""
     base_url: str = "http://localhost:11434"
     """Only read by local backends. Ollama's default listener."""
     timeout: float = 120.0
@@ -102,7 +102,7 @@ class LLMConfig(BaseModel):
         silently switched the scorer off for exactly the users who chose the
         backend to avoid needing one.
         """
-        from jobscan.scoring.judges import available_judges
+        from rolescan.scoring.judges import available_judges
 
         if not self.api_key:
             object.__setattr__(self, "api_key", os.environ.get("ANTHROPIC_API_KEY", ""))
@@ -119,7 +119,7 @@ class HTTPConfig(BaseModel):
     timeout: float = 20.0
     max_concurrent: Annotated[int, Field(ge=1, le=64)] = 8
     max_retries: Annotated[int, Field(ge=0, le=10)] = 3
-    user_agent: str = "jobscan/2.2 (personal job search tool)"
+    user_agent: str = "rolescan/2.2 (personal job search tool)"
 
 
 class EmailConfig(BaseModel):
@@ -135,9 +135,14 @@ class EmailConfig(BaseModel):
     @model_validator(mode="after")
     def _resolve(self) -> Self:
         if not self.password:
-            object.__setattr__(
-                self, "password", os.environ.get("JOBSCAN_SMTP_PASS", "")
+            # JOBSCAN_SMTP_PASS is the pre-rename name. It is the only name this
+            # project ever exported outside its own tree, so an existing shell
+            # profile or crontab still carries it; without the fallback the
+            # digest would silently stop being emailed. Deprecated, not removed.
+            password = os.environ.get("ROLESCAN_SMTP_PASS") or os.environ.get(
+                "JOBSCAN_SMTP_PASS", ""
             )
+            object.__setattr__(self, "password", password)
         if self.enabled and not (self.smtp_host and self.password):
             object.__setattr__(self, "enabled", False)
         return self

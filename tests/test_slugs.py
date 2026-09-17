@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from jobscan.cli import app
-from jobscan.slugs import SlugIndex, normalise
+from rolescan.cli import app
+from rolescan.slugs import SlugIndex, normalise
 
 runner = CliRunner()
 

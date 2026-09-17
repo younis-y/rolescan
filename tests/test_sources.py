@@ -4,11 +4,11 @@ import httpx
 import pytest
 import respx
 
-from jobscan.config import HTTPConfig, SourceEntry
-from jobscan.http import Fetcher, FetchError
-from jobscan.models import Job
-from jobscan.sources import available, get_source
-from jobscan.sources.base import Source, SourceSkipped, strip_html
+from rolescan.config import HTTPConfig, SourceEntry
+from rolescan.http import Fetcher, FetchError
+from rolescan.models import Job
+from rolescan.sources import available, get_source
+from rolescan.sources.base import Source, SourceSkipped, strip_html
 
 
 async def _fetch(entry: SourceEntry) -> list[Job]:

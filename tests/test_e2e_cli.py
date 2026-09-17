@@ -14,7 +14,7 @@ import respx
 from typer.testing import CliRunner
 
 from conftest import plain
-from jobscan.cli import app
+from rolescan.cli import app
 
 runner = CliRunner()
 

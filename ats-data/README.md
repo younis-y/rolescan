@@ -1,6 +1,6 @@
 Put harvested ATS company directories here as JSON, then:
 
-    jobscan slugs "Octopus Energy" --data ats-data
+    rolescan slugs "Octopus Energy" --data ats-data
 
 Filenames must name their ATS so the loader knows what it is reading, e.g.
 `greenhouse_companies.json`, `lever_companies.json`, `ashby_companies.json`,

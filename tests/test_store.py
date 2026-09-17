@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from jobscan.models import (
+from rolescan.models import (
     Confidence,
     CVVariant,
     FitVerdict,
@@ -10,7 +10,7 @@ from jobscan.models import (
     ScoredJob,
     Verdict,
 )
-from jobscan.store import Store
+from rolescan.store import Store
 
 VERDICT = FitVerdict(
     fit_score=88,

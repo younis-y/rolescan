@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from jobscan.models import Job
-from jobscan.sources.base import Source, first_str, register, strip_html
+from rolescan.models import Job
+from rolescan.sources.base import Source, first_str, register, strip_html
 
 __all__ = ["Ashby", "Greenhouse", "Lever", "SmartRecruiters", "Workable"]
 
